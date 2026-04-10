@@ -1,0 +1,177 @@
+{
+  "bug_summary": {
+    "id": "BUG-2024-0042",
+    "title": "NullPointerException in UserSessionManager causing silent auth failures",
+    "severity": "HIGH",
+    "scope": "Auth layer \u2014 UserSession initialisation in SessionManager.create_session()",
+    "affected_users": "8-12% of login attempts under load",
+    "symptoms": [
+      "Login returns HTTP 200 OK but session is not properly initialised",
+      "session.user_id is None after successful login",
+      "Subsequent API calls return 401 Unauthorized",
+      "Silent failure \u2014 no error shown to the user",
+      "~10% failure rate, only under concurrent load",
+      "Non-deterministic \u2014 not reproducible in sequential dev testing"
+    ]
+  },
+  "evidence": {
+    "log_matches": {
+      "null_user_id_warnings": 4,
+      "auth_401_errors": 5,
+      "attribute_errors": 3,
+      "stack_traces_found": 3
+    },
+    "key_log_evidence": [
+      "'session.user_id is None after async init' \u2014 4 warning occurrences",
+      "3 AttributeError lines all point to session/manager.py line 83",
+      "All failures occur during concurrent login burst at 09:45:00 (5+ simultaneous logins)",
+      "Sequential logins at 08:15 and 08:16 succeed with no errors",
+      "Error: AttributeError: 'UserSession' object has no attribute '_user_id'",
+      "Deployment log confirms v2.3.1 is active on all nodes (last entry: 11:00)"
+    ],
+    "stack_trace_summary": {
+      "file": "/app/session/manager.py",
+      "line": 83,
+      "error": "AttributeError: 'UserSession' object has no attribute '_user_id'",
+      "call_chain": [
+        "middleware/auth.py:47 \u2192 session.user_id",
+        "session/manager.py:83 \u2192 return self._user_id",
+        "Error: _user_id attribute does not exist yet"
+      ]
+    },
+    "red_herrings_dismissed": [
+      "Memory heap at 74% (10:15) \u2014 flagged as RED HERRING in log, normal under load",
+      "Slow DB query 210ms (09:48) \u2014 performance issue, unrelated to session auth bug",
+      "Cache eviction at 09:46 \u2014 Redis memory pressure, not related to AttributeError",
+      "GC cycle 3ms (10:15) \u2014 normal garbage collection, not a cause"
+    ]
+  },
+  "repro_artifact": {
+    "path": "/home/claude/purplemerit/assessment2/output/repro_test.py",
+    "run_command": "python repro_test.py",
+    "expected_output": "BUG REPRODUCED \u2014 AttributeError on session.user_id, exit code 1",
+    "bug_reproduced": true,
+    "stdout_preview": "============================================================\nBUG-2024-0042  |  Minimal Reproduction Test\nRace condition: ensure_future vs await in session init\n============================================================\n\nSimulating 20 concurrent login requests...\n\nRESULTS: 0 OK  |  20 FAILED\nFailure rate: 100.0%\n\n\u2717 BUG REPRODUCED \u2014 AttributeError on session.user_id\n  First failure: {'user': 'user_0000', 'status': 'FAILED', 'error': \"'UserSession' object has no attribute '_user_id'\"}\n\nAll results:\n  \u2717  user_0000: FAILED  \u2192 'UserSession' object has no attribute '_user_id'\n  \u2717  user_0001: FAILED"
+  },
+  "root_cause_hypothesis": {
+    "hypothesis": "Race condition: asyncio.ensure_future() used instead of await in SessionManager.create_session()",
+    "confidence": 0.95,
+    "explanation": "In v2.3.1, create_session() was refactored to be async. The session._async_init(user_id) coroutine was scheduled with asyncio.ensure_future() instead of being awaited. ensure_future() returns immediately \u2014 it schedules the coroutine but doesn't wait for it to complete. So the session is returned to the caller with _user_id not yet set. When the auth middleware then accesses session.user_id, Python raises AttributeError: 'UserSession' object has no attribute '_user_id'. This only appears under concurrent load because the event loop is busy handling other requests when ensure_future callbacks run.",
+    "evidence_references": [
+      "Log: 'session.user_id is None after async init' \u2014 4 occurrences",
+      "Stack trace: AttributeError in session/manager.py line 83",
+      "Repro: Bug reproduced in repro_test.py",
+      "Version delta: v2.3.0 (working, sync) \u2192 v2.3.1 (broken, async refactor)"
+    ]
+  },
+  "patch_plan": {
+    "file": "session/manager.py",
+    "function": "SessionManager.create_session()",
+    "one_line_fix": "Replace 'asyncio.ensure_future(...)' with 'await ...'",
+    "diff": "# \u2500\u2500\u2500\u2500 BEFORE (buggy v2.3.1) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nasync def create_session(self, user_id: str) -> UserSession:\n    token = str(uuid.uuid4())\n    session = UserSession(token)\n    asyncio.ensure_future(session._async_init(user_id))  # \u2190 BUG\n    self._sessions[token] = session\n    return session  # returned before _user_id is set!\n\n# \u2500\u2500\u2500\u2500 AFTER (fixed) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nasync def create_session(self, user_id: str) -> UserSession:\n    token = str(uuid.uuid4())\n    session = UserSession(token)\n    await session._async_init(user_id)  # \u2190 FIX: wait for completion\n    self._sessions[token] = session\n    return session  # _user_id is guaranteed to be set now\n",
+    "additional_hardening": [
+      "Add '_user_id = None' in UserSession.__init__ to prevent AttributeError before init",
+      "Add assert/guard in user_id property: if self._user_id is None: raise ValueError",
+      "Add try/except in create_session around _async_init to handle DB write failures",
+      "Search entire codebase for other uses of ensure_future for similar init patterns"
+    ],
+    "risks": [
+      "The await adds ~50ms to login latency (DB write delay). Measure against SLA.",
+      "If _async_init raises an exception, create_session will propagate it \u2014 ensure caller handles it."
+    ]
+  },
+  "validation_plan": {
+    "run_repro_after_fix": "python output/repro_test.py \u2014 should exit 0 (no FAILED entries)",
+    "unit_tests_to_add": [
+      "test_single_login_session_has_user_id()",
+      "test_50_concurrent_logins_all_have_user_id()",
+      "test_session_user_id_raises_if_not_init()"
+    ],
+    "integration_tests": [
+      "POST /login \u2192 GET /api/profile \u2192 expect 200 OK (not 401)",
+      "100 concurrent logins \u2192 0% 401 error rate"
+    ],
+    "load_test": "k6 or locust: 200 concurrent users, 5 minutes, expect 0 AttributeError in logs",
+    "regression_checks": [
+      "All existing auth tests must pass",
+      "Login latency p95 stays under 200ms",
+      "No 401 errors in prod for 24h post-deploy"
+    ]
+  },
+  "review": {
+    "critique_summary": {
+      "PASS": 3,
+      "ACTION": 4,
+      "WARN": 2
+    },
+    "critiques": [
+      {
+        "type": "PASS",
+        "area": "Repro Script",
+        "note": "Bug reproduced. Repro is minimal, focused, and runnable standalone."
+      },
+      {
+        "type": "PASS",
+        "area": "Root Cause",
+        "note": "Root cause is specific and backed by log evidence + repro. High confidence (0.95)."
+      },
+      {
+        "type": "PASS",
+        "area": "Fix Correctness",
+        "note": "await instead of ensure_future is the correct Python async fix. Low risk, well-understood."
+      },
+      {
+        "type": "ACTION",
+        "area": "Defensive Init",
+        "note": "MUST add '_user_id = None' in UserSession.__init__ to prevent AttributeError in any early-access scenario."
+      },
+      {
+        "type": "ACTION",
+        "area": "Exception Handling",
+        "note": "If _async_init raises a DB exception, create_session will propagate it. Wrap in try/except and handle gracefully."
+      },
+      {
+        "type": "WARN",
+        "area": "Latency Impact",
+        "note": "Adding await adds ~50ms to login path. Measure login p95 before and after fix. Acceptable trade-off for correctness."
+      },
+      {
+        "type": "ACTION",
+        "area": "Codebase Scan",
+        "note": "Scan entire codebase for other ensure_future() usages \u2014 the v2.3.1 async refactor may have introduced similar bugs elsewhere."
+      },
+      {
+        "type": "WARN",
+        "area": "Broken Sessions in Prod",
+        "note": "Users who hit broken sessions have corrupted auth state. Run DB cleanup to invalidate sessions with NULL user_id."
+      },
+      {
+        "type": "ACTION",
+        "area": "Test Gap",
+        "note": "No concurrent login test existed pre-v2.3.1. This test MUST be added as a required regression test."
+      }
+    ],
+    "edge_cases": [
+      "What if asyncio event loop is not running when ensure_future is called in tests? (test isolation issue)",
+      "What if user_id is valid but empty string ''? Both None and '' should be treated as invalid.",
+      "Is session token globally unique? uuid4() is safe but verify no collision handling needed.",
+      "Are there broken sessions in production right now with NULL user_id that need cleanup?",
+      "Does the session store have a max size? Under load, could sessions pile up before cleanup job runs?"
+    ],
+    "fix_safe_to_deploy": true,
+    "pre_deploy_checklist": [
+      "Add _user_id = None in UserSession.__init__",
+      "Add try/except around _async_init in create_session",
+      "Write concurrent login test (50+ simultaneous users)",
+      "Run full regression test suite (all green)",
+      "Deploy to staging, run load test, verify 0 AttributeError in logs",
+      "Run DB cleanup to invalidate broken sessions with NULL user_id",
+      "Scan codebase for other ensure_future() usage patterns"
+    ]
+  },
+  "open_questions": [
+    "Are there other ensure_future() usages in the codebase?",
+    "Do broken production sessions need a DB cleanup migration?",
+    "What is the acceptable login latency budget post-fix?"
+  ]
+}
