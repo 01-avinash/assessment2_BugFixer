@@ -1,0 +1,28 @@
+{
+  "id": "BUG-2024-0042",
+  "title": "NullPointerException in UserSessionManager causing silent auth failures",
+  "severity": "HIGH",
+  "priority": "P1",
+  "reported_date": "2026-04-07",
+  "reporter": "qa-team@purplemerit.com",
+  "description": "After deploying v2.3.1, a subset of users (approx 8-12%) are failing to authenticate silently. The login appears to succeed (200 OK returned) but the user session is never properly initialised. Subsequent API calls return 401 Unauthorized. Users are not shown any error message, they just end up in a broken authenticated state.",
+  "expected_behavior": "After successful login, user session should be fully initialised. All subsequent API calls within the session should succeed with the user's auth token.",
+  "actual_behavior": "Login returns 200 OK but session.user_id is None for ~10% of requests. Subsequent API calls return 401. No error is shown to the user. The issue appears non-deterministic but correlates with concurrent login requests.",
+  "environment": {
+    "language": "Python",
+    "runtime": "Python 3.11.4",
+    "framework": "FastAPI 0.104.1",
+    "os": "Ubuntu 22.04 LTS",
+    "version_introduced": "v2.3.1",
+    "last_working_version": "v2.3.0",
+    "deployment": "Docker / Kubernetes"
+  },
+  "reproduction_hints": [
+    "Occurs more frequently under concurrent load (10+ simultaneous logins)",
+    "Seems related to the new async session creation introduced in v2.3.1",
+    "Not reproducible in dev environment (single-threaded)",
+    "Rate: ~10% failure under load, ~0% in sequential testing"
+  ],
+  "affected_users": "8-12% of login attempts under load",
+  "impact": "Users silently stuck in broken auth state, forced to retry login"
+}

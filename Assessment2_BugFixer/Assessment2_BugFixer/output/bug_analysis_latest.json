@@ -1,0 +1,96 @@
+{
+  "bug_summary": {
+    "id": "BUG-2024-0042",
+    "title": "NullPointerException in UserSessionManager causing silent auth failures",
+    "severity": "HIGH",
+    "scope": "Auth layer \u2014 UserSession initialisation in SessionManager.create_session()",
+    "affected_users": "8-12% of login attempts under load",
+    "symptoms": [
+      "Login returns HTTP 200 OK but session is not properly initialised",
+      "session.user_id is None after successful login",
+      "Subsequent API calls return 401 Unauthorized",
+      "Silent failure \u2014 no error shown to the user",
+      "~10% failure rate, only under concurrent load",
+      "Non-deterministic \u2014 not reproducible in sequential dev testing"
+    ]
+  },
+  "evidence": {
+    "log_matches": {
+      "null_user_id_warnings": 4,
+      "auth_401_errors": 5,
+      "attribute_errors": 3,
+      "stack_traces_found": 3
+    },
+    "key_log_evidence": [
+      "'session.user_id is None after async init' \u2014 4 warning occurrences",
+      "3 AttributeError lines all point to session/manager.py line 83",
+      "All failures occur during concurrent login burst at 09:45:00 (5+ simultaneous logins)",
+      "Sequential logins at 08:15 and 08:16 succeed with no errors",
+      "Error: AttributeError: 'UserSession' object has no attribute '_user_id'"
+    ],
+    "stack_trace_summary": {
+      "file": "/app/session/manager.py",
+      "line": 83,
+      "error": "AttributeError: 'UserSession' object has no attribute '_user_id'",
+      "call_chain": [
+        "middleware/auth.py:47 \u2192 session.user_id",
+        "session/manager.py:83 \u2192 return self._user_id"
+      ]
+    },
+    "red_herrings_dismissed": [
+      "Memory heap at 74% (10:15) \u2014 flagged as RED HERRING in log, normal under load",
+      "Slow DB query 210ms (09:48) \u2014 performance issue, unrelated to session auth bug"
+    ]
+  },
+  "repro_artifact": {
+    "path": "d:\\Assessment2_BugFixer_CLEAN\\Assessment2_BugFixer\\output\\repro_test.py",
+    "run_command": "python repro_test.py",
+    "expected_output": "BUG REPRODUCED \u2014 AttributeError on session.user_id, exit code 1",
+    "bug_reproduced": true,
+    "stdout_preview": ""
+  },
+  "root_cause_hypothesis": {
+    "hypothesis": "Race condition: asyncio.ensure_future() used instead of await in SessionManager.create_session()",
+    "confidence": 0.95
+  },
+  "patch_plan": {
+    "file": "session/manager.py",
+    "one_line_fix": "Replace 'asyncio.ensure_future(...)' with 'await ...'",
+    "patch_plan": "Ensure create_session awaits the async initialization of the user session."
+  },
+  "validation_plan": {
+    "run_repro_after_fix": "python output/repro_test.py \u2014 should exit 0"
+  },
+  "review": {
+    "critique_summary": {
+      "PASS": 1,
+      "ACTION": 1,
+      "WARN": 0
+    },
+    "critiques": [
+      {
+        "type": "PASS",
+        "area": "Repro Script",
+        "note": "Bug reproduced via load simulation."
+      },
+      {
+        "type": "ACTION",
+        "area": "Defensive Init",
+        "note": "Set _user_id to None in __init__."
+      }
+    ],
+    "edge_cases": [
+      "Broken sessions in production with NULL user_id."
+    ],
+    "fix_safe_to_deploy": true,
+    "pre_deploy_checklist": [
+      "Run concurrent load tests",
+      "Validate DB consistency"
+    ]
+  },
+  "open_questions": [
+    "Are there other ensure_future() usages in the codebase?",
+    "Do broken production sessions need a DB cleanup migration?",
+    "What is the acceptable login latency budget post-fix?"
+  ]
+}

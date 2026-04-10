@@ -1,0 +1,83 @@
+2026-04-07 08:14:22.001 INFO  [app.startup] PurpleMerit API v2.3.1 starting on port 8000
+2026-04-07 08:14:22.045 INFO  [db.pool] Database connection pool initialised (size=20)
+2026-04-07 08:14:22.102 INFO  [cache.redis] Redis cache connected at localhost:6379
+2026-04-07 08:14:22.134 INFO  [app.startup] Application ready. Workers: 4
+2026-04-07 08:15:01.002 INFO  [auth.login] Login attempt for user user_8821 from 192.168.1.44
+2026-04-07 08:15:01.034 INFO  [auth.login] Password verification OK for user_8821
+2026-04-07 08:15:01.067 INFO  [session.create] Creating session for user_8821 token=abc123x
+2026-04-07 08:15:01.089 INFO  [auth.login] Login SUCCESS user_8821 — returning 200
+2026-04-07 08:16:44.001 INFO  [auth.login] Login attempt for user user_1042 from 10.0.0.12
+2026-04-07 08:16:44.031 INFO  [auth.login] Password verification OK for user_1042
+2026-04-07 08:16:44.062 INFO  [session.create] Creating session for user_1042 token=def456y
+2026-04-07 08:16:44.090 INFO  [auth.login] Login SUCCESS user_1042 — returning 200
+2026-04-07 09:02:11.001 INFO  [health.check] /health OK — latency 4ms
+2026-04-07 09:02:11.050 DEBUG [cache.redis] Cache hit rate: 87.4%
+2026-04-07 09:45:00.001 INFO  [load.balancer] Traffic spike detected — routing to all instances
+2026-04-07 09:45:00.111 INFO  [auth.login] Login attempt for user user_3301
+2026-04-07 09:45:00.113 INFO  [auth.login] Login attempt for user user_4402
+2026-04-07 09:45:00.115 INFO  [auth.login] Login attempt for user user_5503
+2026-04-07 09:45:00.117 INFO  [auth.login] Login attempt for user user_6604
+2026-04-07 09:45:00.118 INFO  [auth.login] Login attempt for user user_7705
+2026-04-07 09:45:00.145 INFO  [auth.login] Password verification OK for user_3301
+2026-04-07 09:45:00.146 INFO  [auth.login] Password verification OK for user_4402
+2026-04-07 09:45:00.147 INFO  [auth.login] Password verification OK for user_5503
+2026-04-07 09:45:00.148 INFO  [auth.login] Password verification OK for user_6604
+2026-04-07 09:45:00.149 INFO  [auth.login] Password verification OK for user_7705
+2026-04-07 09:45:00.201 INFO  [session.create] Creating session token=s_3301_abc
+2026-04-07 09:45:00.202 INFO  [session.create] Creating session token=s_4402_def
+2026-04-07 09:45:00.202 INFO  [session.create] Creating session token=s_5503_ghi
+2026-04-07 09:45:00.203 INFO  [session.create] Creating session token=s_6604_jkl
+2026-04-07 09:45:00.203 INFO  [session.create] Creating session token=s_7705_mno
+2026-04-07 09:45:00.301 WARNING [session.manager] session.user_id is None after async init for token=s_5503_ghi
+2026-04-07 09:45:00.302 WARNING [session.manager] session.user_id is None after async init for token=s_7705_mno
+2026-04-07 09:45:00.310 INFO  [auth.login] Login SUCCESS user_3301 — returning 200
+2026-04-07 09:45:00.311 INFO  [auth.login] Login SUCCESS user_4402 — returning 200
+2026-04-07 09:45:00.312 INFO  [auth.login] Login SUCCESS user_5503 — returning 200  ← session broken
+2026-04-07 09:45:00.313 INFO  [auth.login] Login SUCCESS user_6604 — returning 200
+2026-04-07 09:45:00.314 INFO  [auth.login] Login SUCCESS user_7705 — returning 200  ← session broken
+2026-04-07 09:45:01.005 ERROR [api.auth_middleware] 401 Unauthorized — token=s_5503_ghi user_id=None
+2026-04-07 09:45:01.006 ERROR [api.auth_middleware] 401 Unauthorized — token=s_7705_mno user_id=None
+2026-04-07 09:45:01.007 ERROR [api.auth_middleware] Request rejected: session has no user_id
+Traceback (most recent call last):
+  File "/app/middleware/auth.py", line 47, in __call__
+    user_id = session.user_id
+  File "/app/session/manager.py", line 83, in user_id
+    return self._user_id
+AttributeError: 'UserSession' object has no attribute '_user_id'
+2026-04-07 09:45:01.010 ERROR [api.auth_middleware] 401 Unauthorized — token=s_7705_mno user_id=None
+Traceback (most recent call last):
+  File "/app/middleware/auth.py", line 47, in __call__
+    user_id = session.user_id
+  File "/app/session/manager.py", line 83, in user_id
+    return self._user_id
+AttributeError: 'UserSession' object has no attribute '_user_id'
+2026-04-07 09:45:02.100 INFO  [health.check] /health OK — latency 12ms
+2026-04-07 09:45:05.001 DEBUG [db.pool] Connection pool: 18/20 connections in use
+2026-04-07 09:46:00.001 INFO  [metrics] Request rate: 340 req/s (normal: 120 req/s)
+2026-04-07 09:46:00.042 DEBUG [cache.redis] Cache eviction triggered — memory 89%
+2026-04-07 09:47:33.001 WARNING [session.manager] session.user_id is None after async init for token=s_8891_pqr
+2026-04-07 09:47:33.003 ERROR [api.auth_middleware] 401 Unauthorized — token=s_8891_pqr user_id=None
+Traceback (most recent call last):
+  File "/app/middleware/auth.py", line 47, in __call__
+    user_id = session.user_id
+  File "/app/session/manager.py", line 83, in user_id
+    return self._user_id
+AttributeError: 'UserSession' object has no attribute '_user_id'
+2026-04-07 09:47:40.001 DEBUG [recommendations.engine] Model inference time: 45ms
+2026-04-07 09:47:40.002 DEBUG [recommendations.engine] Cache miss for user_3301
+2026-04-07 09:47:40.003 INFO  [recommendations.engine] Generated 12 recommendations for user_3301
+2026-04-07 09:48:00.001 WARNING [db.pool] Slow query detected: SELECT * FROM sessions WHERE token=? (210ms)
+2026-04-07 09:48:00.045 DEBUG [db.pool] Query plan shows full table scan on sessions — missing index?
+2026-04-07 09:49:11.001 INFO  [auth.login] Login attempt for user user_9912
+2026-04-07 09:49:11.032 INFO  [auth.login] Password verification OK for user_9912
+2026-04-07 09:49:11.060 INFO  [session.create] Creating session token=s_9912_xyz
+2026-04-07 09:49:11.062 WARNING [session.manager] session.user_id is None after async init for token=s_9912_xyz
+2026-04-07 09:49:11.080 INFO  [auth.login] Login SUCCESS user_9912 — returning 200  ← session broken
+2026-04-07 09:49:11.095 ERROR [api.auth_middleware] 401 Unauthorized — token=s_9912_xyz user_id=None
+2026-04-07 10:00:00.001 INFO  [cron.cleanup] Session cleanup job started
+2026-04-07 10:00:00.045 INFO  [cron.cleanup] Removed 234 expired sessions
+2026-04-07 10:00:00.100 INFO  [cron.cleanup] Session cleanup complete
+2026-04-07 10:15:22.001 WARNING [memory] Heap usage at 74% — consider GC tuning (RED HERRING - normal for this load)
+2026-04-07 10:15:22.005 DEBUG [gc] GC cycle completed in 3ms
+2026-04-07 11:00:00.001 INFO  [deploy] v2.3.1 deployment confirmed active on all nodes
+2026-04-07 11:00:00.010 INFO  [deploy] Previous version v2.3.0 marked as standby
